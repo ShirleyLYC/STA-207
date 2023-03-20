@@ -390,7 +390,7 @@ fit.train1 = glm(feedback_type ~ firing_rate + contrast_left * contrast_right + 
 ```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=4,fig.height=3}
 library(pROC)
 fit.train1.roc<-roc(fit.train1$y,fit.train1$fitted.values)
-plot(fit.train1.roc,main="Figure F)", cex.main=0.8)
+plot(fit.train1.roc,main="Figure N)", cex.main=0.8)
 threshold = 0.5
 actual_values = test$feedback_type
 predicted_values1 = ifelse(predict(fit.train1, newdata = test)>threshold,1,0)
