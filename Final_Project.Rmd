@@ -1,0 +1,436 @@
+---
+title: "Exploring the Effects of Visual Stimuli on Neural Activity in the Mouse Brain"
+author: "Shirley Lin"
+date: "March 6th"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# data cleaning
+setwd("~/Desktop/STA 207")
+session=list()
+for(i in 1:5){
+  session[[i]]=readRDS(paste('session',i,'.rds',sep=''))
+}
+t=0.4 # from Background 
+# Obtain the firing rate 
+for (ID in 1:5){
+  n.trials=length(session[[ID]]$spks)
+  n.neurons=dim(session[[ID]]$spks[[1]])[1]
+  firingrate=numeric(n.trials)
+  for(i in 1:n.trials){
+    firingrate[i]=sum(session[[ID]]$spks[[i]])/n.neurons/t
+  }
+  session[[ID]]$firingrate=firingrate
+}
+
+# Obtain max firing rate
+for (ID in 1:5){
+  n.trials=length(session[[ID]]$spks)
+  max_firingrate=numeric(n.trials)
+  for(i in 1:n.trials){
+    max_firingrate[i]=max(session[[ID]]$spks[[i]])/t
+  }
+  session[[ID]]$max_firingrate=max_firingrate
+}
+
+session1=cbind(session[[1]]$contrast_left,session[[1]]$contrast_right,session[[1]]$firingrate,session[[1]]$max_firingrate,rep(1,length(session[[1]]$contrast_left)),session[[1]]$mouse_name, session[[1]]$feedback_type)
+session2=cbind(session[[2]]$contrast_left,session[[2]]$contrast_right,session[[2]]$firingrate,session[[2]]$max_firingrate,rep(2,length(session[[2]]$contrast_left)),session[[2]]$mouse_name,session[[2]]$feedback_type)
+session3=cbind(session[[3]]$contrast_left,session[[3]]$contrast_right,session[[3]]$firingrate,session[[3]]$max_firingrate,rep(3,length(session[[3]]$contrast_left)),session[[3]]$mouse_name,session[[3]]$feedback_type)
+session4=cbind(session[[4]]$contrast_left,session[[4]]$contrast_right,session[[4]]$firingrate,session[[4]]$max_firingrate,rep(4,length(session[[4]]$contrast_left)),session[[4]]$mouse_name,session[[4]]$feedback_type)
+session5=cbind(session[[5]]$contrast_left,session[[5]]$contrast_right,session[[5]]$firingrate,session[[5]]$max_firingrate,rep(5,length(session[[5]]$contrast_left)),session[[5]]$mouse_name,session[[5]]$feedback_type)
+
+df = rbind(session1, session2, session3, session4, session5)
+colnames(df) = c("contrast_left","contrast_right", "firing_rate","max_firing_rate", "session","mouse", "feedback_type")
+df = as.data.frame(df)
+df$contrast_left = as.factor(df$contrast_left)
+df$contrast_right = as.factor(df$contrast_right)
+df$session = as.factor (df$session)
+df$mouse = as.factor(df$mouse)
+df$feedback_type = as.factor(df$feedback_type)
+df$firing_rate = as.numeric(df$firing_rate)
+df$max_firing_rate = as.numeric(df$max_firing_rate)
+```
+
+
+
+# Abstract 
+
+</span>
+
+Since the brain is one of the most intricate structures, neural connections have long been a popular research topic. In this project, the neural activity of the visual cortex is examined to determine whether it is influenced by the interaction of visual stimuli coming from the left or right. The effect of the stimuli is studied using mixed effect models, and we find that the stimuli coming from the left and right of the experimental subject have an additive effect on the mean firing rate of neurons. Additionally, a logistic model is built to predict the type of mouse feedback based on neural activity and stimuli. 
+
+
+
+# Introduction
+
+
+The complexity and interconnectedness of neuron networks, which are crucial for the brain's information processing, allow the brain to carry out a variety of tasks, from simple sensory processing to complex cognitive functions like decision-making and problem-solving. Although different individual brain regions, including the frontal, parietal, and motor cortex, basal ganglia, thalamus, cerebellum, and superior colliculus, have been extensively studied by researchers to understand their roles in various processes, there is still much to learn about how these regions interact and modulate one another during a perceptual decision. 
+
+In this project, I study the mouse neuron data collected by Steinmetz et al (2019). The main goals are to comprehend how the neural activity in the visual cortex is modulated when two visual stimuli on left and right are presented simultaneously and how this knowledge can be applied to predict the trial's outcome when knowing the neural activities and stimuli. More specifically, I want to investigate whether the interaction of stimuli perceived on the left and right sides affects the mean firing rate. On the basis of the neural activity and stimuli provided, I also want to be able to predict whether the experimental unit can provide the correct feedback.
+
+This study is significant because it contributes to a better understanding of how neurons connect and communicate when responding to visual stimuli and making decisions that follow—something that people do every day. Learning the interactive effect can help develop treatment for abnormal binocular interaction such as amblyopia, strabismus, and anisometropia. The results of this study can be applied to other species, including humans, even though there are differences between the neuron networks of mice and people. This is because many essential features of neural processing are conserved across species.   </span>
+
+
+
+ 
+# Background 
+
+</span> 
+
+
+In the study by Stringer et al., 39 experimental sessions over 9538 trials involving a total of 10 mice were conducted to examine neural activity in the visual cortex during a decision-making task. The mice were subjected to several hundred trials in each session that consisted of visual stimuli that were distributed at random across two screens that were placed on either side of the mouse. The contrast levels of the visual stimuli ranged from {0, 0.25, 0.5, 1}, with 0 denoting the absence of a stimulus. When mice correctly spun a wheel to indicate which side they believed had the greatest contrast, they were rewarded with water. If neither stimulus was present, they received a reward for holding the wheel still for 1.5 seconds. The mice were rewarded randomly for turning left or right if the contrast between the left and right stimuli was equal and non-zero. 
+
+Neuropixels probes1,2 were inserted into the left hemisphere of the mice, enabling simultaneous recordings from about 30,000 neurons in 42 different brain regions. This allowed for the simultaneous recording of neural activity in numerous brain regions. Spike trains, which are collections of timestamps corresponding to neuron firing, are a representation of the activity of the neurons in the mice's visual cortex during the trials. 
+
+In this study, we specifically concentrate on the spike trains of neurons in the visual cortex from the start of the stimulus to 0.4 seconds after it started. Furthermore, we only use five sessions (1–5) from two mice (Cori and Forssmann). 
+
+
+
+# Descriptive analysis 
+
+Data for this project are divided into five sessions, with the first three sessions containing information on the mouse Cori and the last two containing information on the mouse Forssmann. The variables used for the project include contrast_left (contrast of the left stimulus), contrast_right (contrast of the right stimulus), which both indicate the intensity of the visual stimuli presented, mouse name, spks(numbers of spikes of neurons in the visual cortex in time bins), time (centers of the time bins for spks), and feedback_type (type of the feedback), which is either a 1 (success) or a -1 (failure). The data selected does not contain any missing values. 
+
+</span>
+The mean firing rate of neurons during each 0.4-second time interval—which is determined by dividing the sum of spikes by the number of firing neurons and seconds—is used to represent neural activity. The mean was selected as a quantitative measurement for this project for a number of reasons. This is due to the fact that the original dataset for spks only has values of 0 and 1, making statistical analysis difficult. Second, the study measures various neurons in the same region over the course of various sessions. We can combine and compare the data from these sessions by taking the mean firing rate. This is crucial because we are more interested in understanding how neurons behave collectively in that region than how they behave individually. Averaging the firing rate also helps to reduce noise and variability, which facilitates finding patterns in the data. 
+
+</span>
+Each session is represented by a different number of trials in the Table A, with session one having the fewest trials (214) and session five having the most trials (254) overall. We can see from the Table A, figure A, B, and C that Mouse Cori has a higher mean firing rate than Mouse Forssmann across all trials. The mean firing rate is highest and the success feedback rate is lowest for both mice during their first session. In its second session, Mouse Cori exhibits a significant reduction in both the mean and standard deviation of firing rate. Mouse Forssman also has much lower mean firing rate in its second session. They both have success that are about twice the failure. The success rate does not change significantly as the mouse completes more sessions; rather, it only slightly rises during the second session. In most trials for both mice, contrast level only slightly increases firing rate rather than having a significant impact. Mean firing rate for Forssmann is similar whether the stimuli are presented on the left or the right, but when the right contrast level is 1, its firing rate is much higher. When stimuli are presented on the left for Mouse Cori, its mean firing rate is low at contrast levels of 0 or 0.25 and increases at contrast levels of 0.5 or 1. However, when stimuli are presented with a right contrast of 0.5 or 1, a slight decrease is observed. 
+
+</span>
+In this paragraph, <a,b> is used to represent visual stimuli provided, in which a is left contrast level and b is right contrast level. From Figure D and E, we observe that many trails are done for <0,0>. In the session for mouse Cori, more trials have large difference in left and right contrast level such as <0,0.5>, <0,1>, <0.25,1>, <0.5,0>, and <1,0>, while much fewer trials are found when left and right contrast is similar such as <0.25,0>, <0.5,0.25>, <0.25,0.25>, and <1,1>. Many trials are given at level <0.25,1> in session 1. Mouse Cori has higher success rate when the stimuli is presented on the left, especially at <1,0>. However, the number of trials offered at each level combination is more evenly distributed for mouse Forssmann across all sessions. In contrast to Cori, Forssman makes more success when the stimuli is on the right. In both of the graphs, we observe higher success when contrast level is high and different from the other. 
+
+
+
+```{r,results = 'asis',echo=FALSE,message=FALSE,warning=FALSE}
+#summary table
+library(qwraps2)
+options(qwraps2_markup = "markdown")
+
+our_summary1 <-
+  list("Firing Rate" =
+       list("min"       = ~ min(firing_rate),
+            "max"       = ~ max(firing_rate),
+            "mean (sd)" = ~ qwraps2::mean_sd(firing_rate),
+            "IQR"       = ~ IQR(firing_rate)),
+       "Feedback Type" =
+       list("success"   = ~ sum(feedback_type == 1),
+            "fail"      = ~ sum(feedback_type == -1))
+       )
+
+ta = summary_table(df, summaries = our_summary1, by = c("session"))
+
+knitr::kable(ta,
+             caption = "Table A)")
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=6,fig.height=2}
+library(ggplot2)
+#density plot
+e=ggplot(df, aes(x = firing_rate, fill = session)) + 
+  geom_density(alpha = 0.5)  +
+  facet_wrap(.~mouse) +
+  labs(x = "Firing Rate", y = "Density", fill = "Session")+
+  ggtitle("A) Density of Firing Rate by Session for Each Mouse")+
+  theme(plot.title = element_text(size = 8))
+e
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=15,fig.height=9}
+library(ggplot2)
+library(cowplot)
+
+#boxplot
+a= ggplot(df, aes(x = contrast_left, y = firing_rate, color = session)) +
+  geom_boxplot() +
+  labs(x = "Contrast Left", y = "Firing Rate", title = "B) Firing Rate vs Contrast Left by Session")
+
+b= ggplot(df, aes(x = contrast_right, y = firing_rate, color = session))+
+  geom_boxplot() +
+  labs(x = "Contrast Right", y = "Firing Rate", title = "C) Firing Rate vs Contrast Right by Session")
+
+
+#scatter plot
+df_cori = df[df$session %in% c(1, 2, 3),]
+df_fors = df[df$session %in% c(4,5),]
+
+c=ggplot(data = df_cori, aes(x = contrast_left, y = contrast_right)) +
+  geom_jitter(aes(color = session, shape = feedback_type), alpha = 0.5) +
+  labs(x = "Contrast Left", y = "Contrast Right", color = "Session", shape = "Feedback Type")+
+  ggtitle("D) Scatterplot of Cori's Feedback for Contrast Level") +
+  theme_bw()
+
+d=ggplot(data = df_fors, aes(x = contrast_left, y = contrast_right)) +
+  geom_jitter(aes(color = session, shape = feedback_type), alpha = 0.5) +
+  labs(x = "Contrast Left", y = "Contrast Right", color = "Session", shape = "Feedback Type") +  
+  ggtitle("E) Scatterplot of Forssmann's Feedback for Contrast Level") +
+  theme_bw()
+
+
+plot_grid(a,b,c,d)
+```
+
+
+
+ 
+
+# Inferential analysis 
+
+A mixed effect model is considered for the project since both fixed effects and random effects are present. Session is considered as a random effect because instead of the impact of each individual session, we are more interested in the impact of stimuli on the neural activity. We want to generalize our findings beyond the particular sessions examined in the dataset because it's possible that there will be very different session effects but similar stimuli effects when the study is reproduced. As sessions 1-3 are for Cori and sessions 4,5 are for Forssmann, the random effect of session also takes into account any potential differences between the two mice. The response firing rate is a numerical variable, and the fixed effect left contrast, fixed effect right contrast, and the random effect session are factor variables. The interaction between left and right contrast is included in the full model but removed in the reduced model in order to test for the significance of the additive effect with the likelihood ratio test. 
+
+</span> 
+The model is defined as 
+$$Y_{ijkl} = \mu_{...} + \alpha_{i} + \beta_{j} + \gamma_{k} + (\alpha\beta)_{ij}+ \epsilon_{ijkl}$$
+where the index $i$ represents the left contrast levels: 0 ($i=1$), 0.25 ($i=2$), 0.5 ($i=3$), 1 ($i=4$),the index $j$ represents the right contrast levels: 0 ($j=1$), 0.25 ($j=2$), 0.5 ($j=3$), 1 ($j=4$), the index $k$ represents the sessions: 1 ($k=1$), 2 ($k=2$), 3 ($k=3$), 4 ($k=4$), and 5 ($k=5$), and $(\alpha\beta)_{ij}$ represents the interaction between ith left contrast and jth right contrast. $\mu_{...}$ represents the population mean of all firing rates across different left and right contrast levels and sessions. $\alpha_{i}$ represents the effect of left contrast on firing rate, $\beta_{j}$ represents the effect of right contrast on firing rate, and $\gamma_{k}$ represents the effect of session on firing rate. $\epsilon_{ijkl}$ represents the variability in data not explained by left, right contrast, their interaction, and session. The assumptions of the model are (i) $\sum \alpha_i = \sum \beta_j =0$, (ii) $\gamma_k$ are i.i.d. $N(0,\sigma_{\gamma}^2)$, (iii) $\sum_i  (\alpha\beta)_{ij} =0$ for any $j$, 
+(iv) $\{\epsilon_{ijkl}\}$ are i.i.d. $N(0,\sigma^2)$, and (v) $\{ \gamma_k\}$, $\{\epsilon_{ijkl} \}$ are mutually independent. 
+</span> 
+Our null hypothesis is that the reduced model has a better fit such that the interaction between left and right contrast have no effect on mean firing rate, while the alternative hypothesis is that the full model is a significant improvement over the reduced one, which means removing the interaction term helps fix the model better. 
+</span> 
+Test results for the likelihood ratio test can be found in table B. The p value is 0.041 and is smaller than the significance level 0.05. We reject the null hypothesis that there is no association between interaction between contrast of the left stimulus and contrast of the right stimulus and the firing rate at the significance level 0.05. The full model is significantly better than the reduced model, and the reduced model without the interaction between contrast_left and contrast_right is not good enough. Therefore, the effect of interaction is present and should be included in the model. 
+</span>
+The summary table of the full model is displayed with the estimated coefficients for the effects of left and right contrast, their interactions, and the intercept. Highest positive coefficients are observed for both left and right contrast at level 1, which is consistent with our findings from the descriptive analysis. All interaction terms have negative coefficients, showing that left and right contrast will collectively decrease the mean firing rate. The interaction with the most significant absolute value, -0.4207187, occurs when contrast left is 1 and contrast right is 0.25, which means that having this combination of contrast level tends to reduce mean firing rate by 0.42. 
+</span>
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+library(knitr)
+library(tidyr)
+library(broom)
+library(lme4)
+library(kableExtra)
+full_model=lmer(firing_rate ~ contrast_left * contrast_right + (1|session), data = df)
+reduced_model=lmer(firing_rate ~ contrast_left + contrast_right + (1|session), data = df)
+tb = anova(reduced_model,full_model)  # likelihood ratio test
+
+```
+
+```{r,results = 'asis',echo=FALSE,message=FALSE,warning=FALSE}
+library(flextable)
+library(magrittr)
+model_summary <- summary(full_model)
+model_table <- as.data.frame(model_summary$coefficients)
+
+table1 <- model_table[1:8, ]
+table2 <- model_table[9:nrow(model_table), ]
+
+
+knitr::kable(list(table1, table2)) %>% 
+  kable_styling() %>% 
+  cat("\\vspace{1cm}")
+
+tb %>%
+  tidy() %>%
+  kable(caption = "Table B) ")%>%
+  column_spec(1:ncol(tb), width = "2cm") %>%  # set column width to 2cm
+  column_spec(seq(2, ncol(tb), by = 2), width = "2cm") %>%  # set every other column width to 1cm
+  as.character() %>% 
+  cat("\\vspace{0.5cm}") 
+```
+
+
+
+# Sensitivity analysis 
+
+
+Normality
+</span>
+
+The residual histogram appears to have a symmetrical bell-shaped distribution around zero with a slight right tail, as shown in figure G. This is in line with the findings in figure H, where the points in the normal qq plot's center are on the normal qq line but have only minor deviations on the two tails. 
+</span>
+The normality assumption for the random effect session is examined in figure I. There are too few points in the qq plot for the random effect "session", so it is difficult to make a definitive assessment of the normality of the distribution. However, most of the points lie near the normal qq line, and the deviation from the qq line might not be too severe to violate the normality assumption. 
+
+</span>
+Variance Homogeneity
+
+</span>
+
+The p-value from Levene’s tests for contrast_left , contrast_right, and their interaction term are 0.01523, 0.4882 and 0.3356 respectively. The p value for contrast left is less than the significance level of 0.05, while the latter two are larger. This indicates that there is evidence of significantly unequal variances of error terms in contrast_left and none in the other two. 
+</span>
+The residuals plot in figure F shows constant variance when fitted value is less than 3 but shows a cone-shaped increase in variance when the fitted value is between 3 and 4. This shows the increase of deviation when the mean firing rate is high. However, the slight heteroskedasticity is not too obvious to violate the constant variance assumption. 
+
+</span>
+
+Figures J and K display the average firing rate residual over trials. We notice an decrease in residual across all five sessions, which gradually shifts from a positive to a negative value. For mouse Cori, the firing rate variations are different across the three sessions, with session one showing a relatively sharp decline over time and session two showing the most stable (almost horizontal) residuals. On the other hand, the overlapped residual line in Figure K shows that the change over time for the two trials of the mouse Forssmann experiment was remarkably similar.
+
+</span>
+```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=15,fig.height=9}
+full_residuals <- residuals(object = full_model)
+fitted_values <- fitted(full_model)
+ggre <- data.frame(fitted_values, full_residuals)
+figf = ggplot(ggre, aes(x = fitted_values, y = full_residuals)) +
+  geom_point() +
+  xlab("Fitted Values") +
+  ylab("Residuals") +
+  geom_hline(yintercept = 0)+
+  ggtitle("F) Residuals vs. Fitted Values Plot")
+
+theoretical_quantiles <- qnorm(ppoints(length(full_residuals)))
+sample_quantiles <- quantile(full_residuals, probs = ppoints(length(full_residuals)))
+ggresid = data.frame(theoretical_quantiles, sample_quantiles)
+figh=ggplot(ggresid, aes(x = theoretical_quantiles, y = sample_quantiles)) +
+  geom_point() +
+  geom_abline(intercept = mean(sample_quantiles), slope = sd(sample_quantiles)/sd(theoretical_quantiles), color = "red")+
+  ggtitle("H) QQ Plot for Residuals")
+
+figg=ggplot(ggre, aes(x = full_residuals)) +
+  geom_histogram(binwidth = 0.5, color = "white") +
+  xlab("Residuals") +
+  ylab("Frequency") +
+  ggtitle("G) Histogram of Residuals")
+
+overtrial <- data.frame()
+for (i in 1:5) {
+  trial <- seq(1, length(session[[i]]$spks))
+  session_data <- data.frame(session = i, trial = trial)
+  overtrial <- rbind(overtrial, session_data)
+}
+result = cbind(overtrial,full_residuals)
+
+sub_cori <- result[result$session %in% c(1, 2, 3),]
+
+figj = ggplot(data = sub_cori, aes(x = trial, y = full_residuals, color = factor(session))) + 
+  geom_point(alpha = 0.5) +
+  labs(title = "Scatterplot of full_residuals vs trial by session", x = "Trial", y = "Residual", color = "Session")+ 
+  geom_smooth(method = "lm", se = FALSE,alpha=0.5)+
+  ggtitle("J) Residuals over Trial for Mouse Cori")
+
+sub_forss <- result[result$session %in% c(4,5),]
+
+figk=ggplot(data = sub_forss, aes(x = trial, y = full_residuals, color = factor(session))) + 
+  geom_point(alpha = 0.5) +
+  labs(title = "Scatterplot of full_residuals vs trial by session", x = "Trial", y = "Residual", color = "Session")+ 
+  geom_smooth(method = "lm", se = FALSE,alpha=0.5)+
+  ggtitle("K) Residuals over Trial for Mouse Forssmann")
+
+random_effects <- ranef(full_model)$session[,"(Intercept)"]
+qq_data <- data.frame(theoretical = qnorm(ppoints(random_effects)), 
+                      random_effects = sort(random_effects))
+figi = ggplot(qq_data, aes(x = theoretical, y = random_effects)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  xlab("Theoretical Quantiles") +
+  ylab("Random Effects") +
+  ggtitle("I) QQ Plot of Random Effects")
+
+
+plot_grid(figf,figh,figj,figg,figi,figk)
+```
+
+A likelihood ratio test is used to examine whether the random effects from sessions should be account for. While the full model contains all terms as described above, the reduced model is a fixed effect model without session. Test results for the likelihood ratio test shows that the p value is < 2.2e-16 and is much smaller than the significance level 0.05. The full model is significantly better than the reduced model, so the random effect should be kept in the model.
+
+</span>
+
+
+While mean firing rate is chosen to represent neural activity, other summary measures of firing rate are also taken into consideration. Since peak firing rate can be a important component of a neuron's response and is more likely to capture bursts of activity that could have interesting findings, maximum firing rate over each 0.4s interval is taken into consideration. 
+</span>
+The likelihood ratio test that uses the maximum firing rate to test for the additive effect yields a p value of 0.2318, indicating that the interaction between left and right contrast is not statistically significant. This finding differs from what we found when we constructed the model with mean firing rate. 
+</span>
+Our observations are restricted because maximum only has seven whole values. While we anticipate the points to be dispersed around 0, Figure L's residual plot displays a distinct linear pattern. Compared to the plot for mean firing rate, the deviations from the normal qq line shown in figure M are more severe. As a result, we draw the conclusion that using the maximum firing rate as a response violates the model assumption, and we choose to stick with the previous model. 
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=15,fig.height=9}
+model_max=lmer(max_firing_rate ~ contrast_left * contrast_right + (1|session), data = df)
+max_residuals <- residuals(object = model_max)
+
+fitted_values <- fitted(model_max)
+ggre <- data.frame(fitted_values, max_residuals)
+l = ggplot(ggre, aes(x = fitted_values, y = max_residuals)) +
+  geom_point() +
+  xlab("Fitted Values") +
+  ylab("Residuals") +
+  geom_hline(yintercept = 0)+
+  ggtitle("L) Residuals vs. Fitted Values Plot")
+
+theoretical_quantiles <- qnorm(ppoints(length(max_residuals)))
+sample_quantiles <- quantile(max_residuals, probs = ppoints(length(max_residuals)))
+ggresid = data.frame(theoretical_quantiles, sample_quantiles)
+m=ggplot(ggresid, aes(x = theoretical_quantiles, y = sample_quantiles)) +
+  geom_point() +
+  geom_abline(intercept = mean(sample_quantiles), slope = sd(sample_quantiles)/sd(theoretical_quantiles), color = "red")+
+  ggtitle("M) QQ Plot for Residuals")
+
+
+plot_grid(l,m)
+```
+
+
+# Predictive Modeling
+Given that our outcome is a binary variable with values -1 and 1, a logistic model is used to predict the mouse's type of feedback based on neural activity and stimuli. 
+</span> 
+The model is defined as 
+$$
+\text{logit}(P_i(y)) = \beta_0 + \beta X_1 + \sum_{i = 1}^{4} \beta X_{2i} +
+\sum_{j = 1}^{4} \beta X_{3j}+ \sum_{k = 1}^{5} \beta X_{4k} +
+\sum_{i = 1}^{4}\sum_{j = 1}^{4}\beta X_{5ij}
+$$
+
+where y is the binary feedback type, $\beta_0$ is the intercept. $\beta_n$ are the effect of $X_n$ for all the following n variables. $X_1$ represents the mean firing rate, $X_2$ represents left contrast, the index $i$ represents the left contrast levels: 0 ($i=1$), 0.25 ($i=2$), 0.5 ($i=3$), 1 ($i=4$), $X_3$ represents right contrast, the index $j$ represents the right contrast levels: 0 ($j=1$), 0.25 ($j=2$), 0.5 ($j=3$), 1 ($j=4$), $X_4$ represents session, the index $k$ represents the sessions: 1 ($k=1$), 2 ($k=2$), 3 ($k=3$), 4 ($k=4$), and X5 represents the interaction between ith left contrast and jth right contrast.
+</span>
+Once again, we use a likelihood ratio test with a full model that includes all of the terms mentioned above. Only the interaction term is removed from the first reduced model, and only the session is removed from the second reduced model. The result shows p-values of 0.0002017 and 1.423e-14 in the tests respectively, proving our full model is significantly better than these reduced model, and that all terms should be included. 
+</span>
+We split the initial data, using the first 100 trials as testing data and the remaining trials as training data. The training data is used to refit the model listed above. The receiver operating characteristic (ROC) curve below is created to display the effectiveness of classification, and the area under the curve appears to be 0.7098, showing my model is moderately good at predicting the feedback of the mouse. The confusion matrix is generated by contrasting the test set's actual and predicted values. The model should be equally sensitive to both types of errors because the cost of getting a false positive is the same as a false negative, that is, we don't care which direction we are incorrectly predicting the mouse response, so the threshold is set to 0.5. The resulting confusion matrix is shown below. The sensitivity (true positive rate) of my predicted model is 63/(63+11) = 0.8513514, while the specificity (true negative rate) is 9/(9+17) = 0.3461538. My model has a high sensitivity but a relatively low specificity. In other words, my model is good at predicting the mouse when giving the right feedback, but occasionally when the mouse fails, we might predict them to succeed incorrectly. 
+
+```{r, echo=FALSE, results='hide',message=FALSE}
+df$feedback_type <- ifelse(df$feedback_type == -1, "fail", "success")
+df$feedback_type <- ifelse(df$feedback_type == "fail", 0, 1)
+df$feedback_type = as.factor(df$feedback_type)
+df_rm <- df[-c(1:100), ] 
+test = df[c(1:100),]
+train = df[-c(1:100), ]
+fit.train1 = glm(feedback_type ~ firing_rate + contrast_left * contrast_right + session,family = binomial(), data = train)
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,fig.width=4,fig.height=3}
+library(pROC)
+fit.train1.roc<-roc(fit.train1$y,fit.train1$fitted.values)
+plot(fit.train1.roc,main="Figure F)", cex.main=0.8)
+threshold = 0.5
+actual_values = test$feedback_type
+predicted_values1 = ifelse(predict(fit.train1, newdata = test)>threshold,1,0)
+conf_matrix1 = table(predicted_values1, actual_values)
+conf_matrix1  
+```
+
+
+
+# Discussion 
+
+
+Based on the study by Stringer et al., this project aimed to investigate how the neural activity in the visual cortex of mice is modulated when two visual stimuli are presented simultaneously and then to predict the outcome of a trial based on the neural activities and stimuli. By examining the spike trains of neurons in the visual cortex of two mice, Cori and Forssmann, we focused on the mean firing rate during the 0.4-second time interval after the stimuli were presented. The results of this study provide valuable insights into the way neurons connect and communicate when responding to visual stimuli and making decisions.
+
+</span> 
+
+We build mixed effect models and find that the left contrast and right contrast have an additive effect on the mean firing rate of neurons and that interactions collectively reduce neural activity. Our understanding of how the brain communicates visual information and makes decisions through either side of the hemisphere can be affected by the findings of my project. This discovery may have implications for a variety of issues and applications in the real world, such as the creation of more potent remedies for disorders and impairments of the visual system. For instance, knowing how the brain processes visual data could aid researchers in creating more potent treatments for conditions like amblyopia, also known as "lazy eye", where one eye is weaker than the other and the brain fails to properly integrate visual data from both eyes (Kiorpes, 1998). As a result of the finding that the interaction between visual stimuli has a negative correlation with the mean neural firing rate, treatments may involve training the patient to only use their weaker eye while covering their stronger eye in order to reactivate the region of the brain that controls their vision in that eye. Since there is no longer any interaction between left and right stimuli, more spikes might occur to prevent it from being "lazy". For similar reasons, the project's findings can be applied to comprehend abnormal binocular interaction or to develop treatments for it. 
+
+</span> 
+
+A few issues with the experiment have been found. In each session, we notice a general decline in firing rate, which could be caused by a number of factors. We cannot attribute the decline in firing rate to session learning because we did not notice a rise in success rate from trial to trial. One possibility is that the mouse gets tired throughout the trials, which would result in a concurrent decrease in firing rate. Another possibility is that the reward is water, making it less desirable over time because the mice already have some. Laboratory mice have been shown to respond favorably to liquid sucrose, conventional laboratory chow, and sweetened condensed milk as possible options for sustaining motivation and performance and should be considered as reward. 
+
+</span> 
+
+As I mentioned in the descriptive analysis, another issue is the variance in difficulty across sessions. Forssmann received a greater number of trials that were more difficult to distinguish because they had similar contrast levels on both sides. The task's difficulty is very likely to have an impact on the mean firing rate. Even though the model already includes session as a random effect, making trials more consistent will undoubtedly eliminate outside factors that the model does not account for. 
+
+
+
+# Reference {-}
+
+Kiorpes, L., Kiper, D. C., O’Keefe, L. P., Cavanaugh, J. R., &amp; Movshon, J. A. (1998). Neuronal correlates of amblyopia in the visual cortex of macaque monkeys with experimental strabismus and Anisometropia. The Journal of Neuroscience, 18(16), 6411–6424. https://doi.org/10.1523/jneurosci.18-16-06411.1998 
+
+</span> 
+
+Steinmetz, N. A., Zatka-Haas, P., Carandini, M., &amp; Harris, K. D. (2019). Distributed coding of choice, action and engagement across the Mouse Brain. Nature, 576(7786), 266–273. https://doi.org/10.1038/s41586-019-1787-x 
+
+
+
+# Session info {-}
+
+```{r}
+sessionInfo()
+```
